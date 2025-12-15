@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Room_OS v31 (Mobile)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/default.css">
+    <script src="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/scroll-behaviour.min.js"></script>
+    <script>
+        // Activate Mobile Dragging
+        MobileDragDrop.polyfill({
+            dragImageCenterOnTouch: true,
+            iterationInterval: 50
+        });
+    </script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Quicksand', sans-serif; background-color: #f0f9ff; overflow: hidden; color: #1e293b; touch-action: pan-x pan-y; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; } 
+        ::-webkit-scrollbar-track { background: transparent; } 
+        ::-webkit-scrollbar-thumb { background: #bfdbfe; border-radius: 10px; }
+        
+        /* Dragging visuals */
+        .drag-card { cursor: grab; user-select: none; transition: transform 0.1s; touch-action: none; -webkit-touch-callout: none; } 
+        .drag-card:active { cursor: grabbing; transform: scale(1.05); z-index: 99; opacity: 0.9; }
+        
+        /* Prevent text selection on mobile */
+        .drag-card * { pointer-events: none; user-select: none; -webkit-user-select: none; }
+        .drag-card button { pointer-events: auto; } 
+
+        .bg-dots { background-color: #f0f9ff; background-image: radial-gradient(#bfdbfe 2px, transparent 2px); background-size: 24px 24px; }
+        .highlight { border-color: #6366f1 !important; box-shadow: 0 0 0 4px #c7d2fe !important; }
+        .dimmed { opacity: 0.3; filter: grayscale(80%); }
+        
+        @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .toast-enter { animation: slideUp 0.3s ease-out forwards; }
+        
+        .warn-overflow { border: 3px dashed #ef4444 !important; background-color: #fef2f2; }
+        
+        /* Clearer Drop Zone */
+        .drop-active { background-color: #eff6ff !important; border: 3px dashed #60a5fa !important; transform: scale(1.01); }
+        
+        input:focus { outline: none; border-color: #60a5fa; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <button onclick="localStorage.clear(); window.location.reload()" style="position:fixed; bottom:5px; left:5px; z-index:9999; padding:5px 10px; background:#e2e8f0; color:#64748b; border:none; border-radius:5px; font-family:sans-serif; font-size:10px; opacity:0.5;">Reset</button>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- ICONS ---
+        const Icons = {
+            Trash: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>,
+            Plus: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
+            Cube: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>,
+            Edit: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>,
+            Grip: () => <svg className="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16"/></svg>,
+            Refresh: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>,
+            ZoomIn: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>,
+            ZoomOut: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>,
+            Search: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>,
+            Cog: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>,
+            ChevronDown: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"></path></svg>,
+            Download: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>,
+            Upload: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>,
+            List: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>,
+            Help: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        };
+
+        const DEFAULT_SHOP = [
+            { id: 'def1', name: 'Cute Box', dims: {l:30, w:20, h:12}, size: 1, color: 'bg-white border-slate-200' },
+            { id: 'def2', name: 'Big Bin', dims: {l:40, w:40, h:30}, size: 2, color: 'bg-white border-slate-200' }
+        ];
+
+        const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
+        const loadState = (key, def) => { 
+            try { 
+                const s = localStorage.getItem(key); 
+                return (s && s !== "undefined" && s !== "null") ? JSON.parse(s) : def; 
+            } catch { return def; } 
+        };
+
+        function App() {
+            // STATE (V31 keys for mobile safety)
+            const [roomName, setRoomName] = useState(() => loadState('v31_roomname', "My Chill Room"));
+            const [inventory, setInventory] = useState(() => loadState('v31_inventory', [{id: 1, text: "Plushie"}, {id: 2, text: "Headphones"}]));
+            const [furniture, setFurniture] = useState(() => {
+                const data = loadState('v31_furniture', []);
+                return data.map(f => ({...f, compartments: f.compartments.map(c => ({...c, contents: c.contents.map(obj => (obj.type==='box' && !obj.items) ? {...obj, items:[]} : obj) }))}));
+            }); 
+            const [shop, setShop] = useState(() => loadState('v31_shop', DEFAULT_SHOP));
+            
+            const [newItemText, setNewItemText] = useState("");
+            const [saveStatus, setSaveStatus] = useState("Saved");
+            const [zoom, setZoom] = useState(1);
+            const [searchTerm, setSearchTerm] = useState("");
+            const [collapsed, setCollapsed] = useState({});
+            const [showStats, setShowStats] = useState(false);
+            const [showHelp, setShowHelp] = useState(false);
+            const [toast, setToast] = useState(null);
+            
+            // On Mobile, defaults to hiding sidebars to save space
+            const [showLeft, setShowLeft] = useState(window.innerWidth > 768);
+            const [showRight, setShowRight] = useState(window.innerWidth > 768);
+            const fileInputRef = useRef(null);
+
+            const [cName, setCName] = useState("");
+            const [cDims, setCDims] = useState({l:"", w:"", h:""});
+
+            // Persistence
+            useEffect(() => {
+                localStorage.setItem('v31_roomname', JSON.stringify(roomName));
+                localStorage.setItem('v31_inventory', JSON.stringify(inventory));
+                localStorage.setItem('v31_furniture', JSON.stringify(furniture));
+                localStorage.setItem('v31_shop', JSON.stringify(shop));
+                setSaveStatus("Saved");
+            }, [roomName, inventory, furniture, shop]);
+
+            const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
+
+            // Math
+            const calculateUsedWidth = (contents) => {
+                if(!contents) return 0;
+                return contents.reduce((acc, obj) => {
+                    if (obj.type === 'box' && obj.dims && obj.dims.w) return acc + (parseInt(obj.dims.w) || 0);
+                    return acc;
+                }, 0);
+            };
+            const formatDims = (dims) => dims ? `${dims.w||'?'}x${dims.l||'?'}x${dims.h||'?'}` : "";
+
+            // Search
+            const hasMatch = (obj, term) => {
+                if (!term) return true;
+                if (!obj) return false;
+                const t = term.toLowerCase();
+                if (obj.name && obj.name.toLowerCase().includes(t)) return true;
+                if (obj.text && obj.text.toLowerCase().includes(t)) return true;
+                if (obj.contents) return obj.contents.some(child => hasMatch(child, term));
+                if (obj.items) return obj.items.some(item => hasMatch(item, term));
+                if (obj.compartments) return obj.compartments.some(comp => hasMatch(comp, term));
+                return false;
+            };
+            const getHighlightClass = (obj) => { if (!searchTerm) return ""; return hasMatch(obj, searchTerm) ? "highlight" : "dimmed"; };
+
+            // Actions
+            const resetData = () => { if(confirm("Start fresh?")) { localStorage.clear(); window.location.reload(); } };
+            const addInv = (e) => { e.preventDefault(); if(!newItemText.trim())return; setInventory([...inventory, {id: Date.now(), text: newItemText}]); setNewItemText(""); };
+            const delInv = (id) => { setInventory(inventory.filter(i=>i.id!==id)); showToast("Deleted!"); };
+            const renInv = (id) => { const item = inventory.find(i=>i.id===id); const txt = prompt("Rename:", item.text); if(txt) setInventory(inventory.map(i=>i.id===id ? {...i, text:txt} : i)); };
+            const addShop = (e) => { e.preventDefault(); if(!cName)return; setShop([...shop, { id: Date.now().toString(), name: cName, dims: {...cDims}, size: 1 }]); setCName(""); setCDims({l:"",w:"",h:""}); showToast("Added to Shop!"); };
+            const delShop = (id) => setShop(shop.filter(s=>s.id!==id));
+            const editShopItem = (id) => { const item = shop.find(s=>s.id===id); const newName = prompt("Name:", item.name); if(newName!==null){ const newW=prompt("W:", item.dims.w||""); const newL=prompt("D:", item.dims.l||""); const newH=prompt("H:", item.dims.h||""); setShop(shop.map(s=>s.id===id?{...s, name:newName, dims:{w:newW,l:newL,h:newH}}:s)); } };
+            const addFurniture = () => { const name = prompt("Furniture Name:"); if(!name) return; const rows = Math.max(1, parseInt(prompt("Shelves:", "3"))||1); const newComps = Array.from({length: rows}, (_, i) => ({ id: Date.now()+i, name: `Shelf ${i+1}`, widthLimit: 0, contents: [] })); setFurniture([...furniture, { id: Date.now(), name, compartments: newComps }]); showToast("✨ Furniture Created!"); };
+            const delFurniture = (id) => { if(!confirm("Delete?")) return; const f = furniture.find(x=>x.id===id); let rec=[]; f.compartments.forEach(c=>c.contents.forEach(o=>{if(o.type==='item')rec.push({id:o.id,text:o.text});if(o.type==='box')o.items.forEach(i=>rec.push(i));})); setInventory([...inventory, ...rec]); setFurniture(furniture.filter(x=>x.id!==id)); showToast("Deleted!"); };
+            const toggleCollapse = (id) => setCollapsed(prev => ({...prev, [id]: !prev[id]}));
+            const editCompartment = (fId, cId, cName, cLim) => { const name = prompt("Rename:", cName); if(name!==null){ const lim = parseInt(prompt("Width Limit (cm):", cLim||0))||0; const newF = deepClone(furniture); const c = newF.find(x=>x.id===fId).compartments.find(x=>x.id===cId); c.name=name; c.widthLimit=lim; setFurniture(newF); } };
+            const renamePlacedItem = (fId, cId, bId, iId, txt) => { const n = prompt("Rename:", txt); if(n!==null){ const newF = deepClone(furniture); const c = newF.find(x=>x.id===fId).compartments.find(x=>x.id===cId); if(!bId) c.contents.find(x=>x.id===iId).text=n; else c.contents.find(x=>x.instanceId===bId).items.find(x=>x.id===iId).text=n; setFurniture(newF); } };
+            const removePlacedBox = (fId, cId, bId) => { if(!confirm("Unpack box?")) return; const newF=deepClone(furniture); const c=newF.find(x=>x.id===fId).compartments.find(x=>x.id===cId); const idx=c.contents.findIndex(x=>x.instanceId===bId); if(idx>-1){ const box=c.contents[idx]; const items=Array.isArray(box.items)?box.items:[]; setInventory(p=>[...p,...items]); c.contents.splice(idx,1); setFurniture(newF); showToast("📦 Unpacked!"); } };
+            const editPlacedBox = (fId, cId, bId, name, dims) => { const n=prompt("Name:", name); if(n!==null){ const w=prompt("Width:", dims.w||""); const newF=deepClone(furniture); const b=newF.find(x=>x.id===fId).compartments.find(x=>x.id===cId).contents.find(x=>x.instanceId===bId); b.name=n; if(!b.dims)b.dims={}; b.dims.w=w; setFurniture(newF); } };
+
+            // --- DRAG HANDLERS (UNIVERSAL FIX) ---
+            const handleDragStart = (e, type, data, ctx={}) => { 
+                e.stopPropagation(); 
+                e.dataTransfer.setData("text/plain", JSON.stringify({...data, type, ...ctx})); 
+                e.dataTransfer.effectAllowed = "move";
+            };
+            
+            const handleDragOver = (e) => { 
+                e.preventDefault(); 
+                e.dataTransfer.dropEffect = "move"; 
+            };
+            const handleDragEnter = (e) => { e.preventDefault(); e.currentTarget.classList.add("drop-active"); };
+            const handleDragLeave = (e) => { e.preventDefault(); e.currentTarget.classList.remove("drop-active"); };
+            const handleDropCleanup = (e) => { e.currentTarget.classList.remove("drop-active"); };
+
+            const dropOnCompartment = (e, fId, cId) => {
+                e.preventDefault(); e.stopPropagation(); handleDropCleanup(e);
+                try {
+                    const raw = e.dataTransfer.getData("text/plain");
+                    if (!raw) return;
+                    const p = JSON.parse(raw);
+                    
+                    if(p.type==='BOX_TEMPLATE'){ const b={type:'box', instanceId:Date.now(), name:p.name, dims:p.dims, items:[], color:["bg-sky-50 border-sky-200","bg-indigo-50 border-indigo-200","bg-blue-50 border-blue-200","bg-cyan-50 border-cyan-200","bg-slate-50 border-slate-200"][Math.floor(Math.random()*5)]}; const f=deepClone(furniture); f.find(x=>x.id===fId).compartments.find(x=>x.id===cId).contents.push(b); setFurniture(f); return; }
+                    if(p.sourceType==='INVENTORY'){ setInventory(inv=>inv.filter(x=>x.id!==p.id)); const f=deepClone(furniture); f.find(x=>x.id===fId).compartments.find(x=>x.id===cId).contents.push({type:'item', id:p.id, text:p.text}); setFurniture(f); return; }
+                    setFurniture(prev=>{ const f=deepClone(prev); const srcC=f.find(x=>x.id===p.sourceFId).compartments.find(x=>x.id===p.sourceCId); let mv=null; 
+                    if(p.type==='PLACED_BOX'){ const idx=srcC.contents.findIndex(x=>x.instanceId===p.instanceId); if(idx>-1){ mv=srcC.contents[idx]; srcC.contents.splice(idx,1); } }
+                    else if(p.type==='PLACED_ITEM'){ if(p.sourceBoxId){ const b=srcC.contents.find(x=>x.instanceId===p.sourceBoxId); const idx=b.items.findIndex(x=>x.id===p.id); if(idx>-1){ mv={type:'item',id:p.id,text:p.text}; b.items.splice(idx,1); } } else { const idx=srcC.contents.findIndex(x=>x.id===p.id); if(idx>-1){ mv=srcC.contents[idx]; srcC.contents.splice(idx,1); } } }
+                    if(mv) f.find(x=>x.id===fId).compartments.find(x=>x.id===cId).contents.push(mv); return f; });
+                } catch(err) { console.warn("Drop Failed:", err); }
+            };
+
+            const dropOnBox = (e, fId, cId, bId) => {
+                e.preventDefault(); e.stopPropagation();
+                try {
+                    const raw = e.dataTransfer.getData("text/plain");
+                    if (!raw) return;
+                    const p = JSON.parse(raw);
+
+                    if(p.type==='BOX_TEMPLATE'||p.type==='PLACED_BOX') return;
+                    if(p.sourceType==='INVENTORY'){ setInventory(inv=>inv.filter(x=>x.id!==p.id)); const f=deepClone(furniture); f.find(x=>x.id===fId).compartments.find(x=>x.id===cId).contents.find(x=>x.instanceId===bId).items.push({id:p.id, text:p.text}); setFurniture(f); return; }
+                    setFurniture(prev=>{ const f=deepClone(prev); const srcC=f.find(x=>x.id===p.sourceFId).compartments.find(x=>x.id===p.sourceCId); let mv=null;
+                    if(p.sourceBoxId){ const b=srcC.contents.find(x=>x.instanceId===p.sourceBoxId); const idx=b.items.findIndex(x=>x.id===p.id); if(idx>-1){ mv=b.items[idx]; b.items.splice(idx,1); } } else { const idx=srcC.contents.findIndex(x=>x.id===p.id); if(idx>-1){ mv={id:srcC.contents[idx].id, text:srcC.contents[idx].text}; srcC.contents.splice(idx,1); } }
+                    if(mv) f.find(x=>x.id===fId).compartments.find(x=>x.id===cId).contents.find(x=>x.instanceId===bId).items.push(mv); return f; });
+                } catch(err) { console.warn("Box Drop Failed:", err); }
+            };
+
+            const exportData = () => { const d={roomName, inventory, furniture, shop, date:new Date().toISOString()}; const b=new Blob([JSON.stringify(d)],{type:'application/json'}); const u=URL.createObjectURL(b); const a=document.createElement('a'); a.href=u; a.download=`${roomName.toLowerCase().replace(/\s/g,'-')}.json`; a.click(); URL.revokeObjectURL(u); showToast("File Saved!"); };
+            const triggerImport = () => fileInputRef.current.click();
+            const importData = (e) => { const f=e.target.files[0]; const r=new FileReader(); r.onload=(ev)=>{ try{const d=JSON.parse(ev.target.result); if(confirm("Replace current room?")){ if(d.roomName)setRoomName(d.roomName); setInventory(d.inventory||[]); setFurniture(d.furniture||[]); setShop(d.shop||[]); showToast("Loaded!"); } }catch(x){alert("Invalid File");} }; r.readAsText(f); e.target.value=null; };
+            const zoomIn = () => setZoom(p => Math.min(p + 0.1, 1.5)); const zoomOut = () => setZoom(p => Math.max(p - 0.1, 0.4));
+
+            const generateStats = () => {
+                let boxCounts = {}; let totalItems = 0; let furnitureCount = furniture.length;
+                furniture.forEach(f => f.compartments.forEach(c => c.contents.forEach(obj => { if(obj.type==='item') totalItems++; if(obj.type==='box') { const key=`${obj.name} (${formatDims(obj.dims)})`; boxCounts[key]=(boxCounts[key]||0)+1; totalItems+=obj.items.length; } })));
+                const copyList = () => { let t = `${roomName.toUpperCase()}\n\n`; Object.entries(boxCounts).forEach(([n,c])=>t+=`[ ] ${c}x ${n}\n`); navigator.clipboard.writeText(t); showToast("Copied!"); };
+                return { boxCounts, totalItems, furnitureCount, copyList };
+            };
+
+            return (
+                <div className="flex h-screen overflow-hidden text-slate-800 bg-dots font-sans">
+                    <input type="file" ref={fileInputRef} onChange={importData} className="hidden" accept=".json" />
+                    
+                    {toast && <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-white text-indigo-600 border-2 border-indigo-200 px-6 py-2 rounded-full shadow-xl z-[100] flex items-center gap-2 text-sm font-bold toast-enter"><span>🧊</span> {toast}</div>}
+
+                    {showStats && (
+                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm border-2 border-indigo-200 animate-enter">
+                                <h2 className="text-xl font-bold text-indigo-600 mb-4 flex items-center gap-2"><Icons.List/> Shopping List</h2>
+                                <div className="bg-indigo-50 rounded-2xl p-4 mb-4 max-h-[50vh] overflow-y-auto">
+                                    {Object.entries(generateStats().boxCounts).length === 0 ? <p className="text-sm text-indigo-400 italic text-center">Your shopping list is empty!</p> : 
+                                    Object.entries(generateStats().boxCounts).map(([n,c])=>(<div key={n} className="flex justify-between py-2 border-b border-indigo-100 last:border-0"><span className="text-sm font-bold text-slate-700">{n}</span><span className="bg-white text-indigo-600 text-xs font-black px-2 py-1 rounded-full border border-indigo-200">{c}x</span></div>))}
+                                </div>
+                                <div className="flex gap-2"><button onClick={generateStats().copyList} className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white py-3 rounded-2xl font-bold text-sm shadow-pop btn-pop">Copy List</button><button onClick={()=>setShowStats(false)} className="px-6 bg-white hover:bg-slate-50 text-slate-500 border-2 border-slate-200 rounded-2xl font-bold text-sm transition-colors">Close</button></div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {showHelp && (
+                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                            <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-sm border-2 border-sky-200 animate-enter">
+                                <h2 className="text-2xl font-bold text-sky-600 mb-2">Welcome! ☁️</h2>
+                                <p className="text-sm text-slate-500 mb-6">Let's organize {roomName}.</p>
+                                <ul className="space-y-4 text-sm text-slate-600 mb-8">
+                                    <li className="flex gap-3 items-center"><span className="bg-indigo-100 p-2 rounded-xl text-indigo-500"><Icons.Plus/></span> <span>Add items on the left.</span></li>
+                                    <li className="flex gap-3 items-center"><span className="bg-sky-100 p-2 rounded-xl text-sky-500"><Icons.Edit/></span> <span>Drag & Drop to organize.</span></li>
+                                    <li className="flex gap-3 items-center"><span className="bg-blue-100 p-2 rounded-xl text-blue-500"><Icons.List/></span> <span>Export your shopping list!</span></li>
+                                </ul>
+                                <button onClick={()=>setShowHelp(false)} className="w-full bg-sky-500 hover:bg-sky-600 text-white py-3 rounded-2xl font-bold shadow-pop btn-pop">Let's Start!</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* LEFT SIDEBAR (Blue Tones) */}
+                    <div className={`bg-white/80 backdrop-blur-md border-r border-sky-100 flex flex-col z-30 shadow-xl sidebar-transition absolute md:relative h-full ${showLeft ? 'w-80' : 'w-0 overflow-hidden'}`}>
+                        <div className="p-6 min-w-[320px]"><h2 className="font-bold text-xl text-sky-600 flex items-center gap-2 mb-4">Inventory <span className="bg-sky-100 text-xs px-2 py-1 rounded-full text-sky-700">{inventory.length}</span></h2>
+                        <form onSubmit={addInv} className="flex gap-2"><input className="flex-1 bg-white border-2 border-sky-100 rounded-xl px-4 py-2 text-sm focus:border-sky-300 transition-colors" placeholder="New Item..." value={newItemText} onChange={e=>setNewItemText(e.target.value)} /><button className="bg-sky-500 text-white p-2.5 rounded-xl hover:bg-sky-600 shadow-sm transition-transform active:scale-90"><Icons.Plus/></button></form></div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3 min-w-[320px]">
+                            {inventory.map(i => (<div key={i.id} draggable onDragStart={e=>handleDragStart(e,'ITEM',i, {sourceType:'INVENTORY'})} className={`drag-card group flex items-center gap-3 bg-white border-2 border-slate-100 p-3 rounded-2xl hover:border-sky-300 hover:shadow-lg ${getHighlightClass(i)}`}><span className="text-sky-300"><Icons.Grip /></span><span className="text-sm font-bold text-slate-600 flex-1 truncate">{i.text}</span><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={()=>renInv(i.id)} className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg"><Icons.Edit/></button><button onClick={()=>delInv(i.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Icons.Trash/></button></div></div>))}
+                        </div>
+                    </div>
+
+                    {/* CENTER CANVAS */}
+                    <div className="flex-1 bg-dots relative flex flex-col h-screen overflow-hidden">
+                        {/* HEADER */}
+                        <div className="h-20 flex justify-between items-center px-4 md:px-8 gap-4 z-20 shrink-0">
+                            <div className="flex items-center gap-4 flex-1">
+                                <button onClick={()=>setShowLeft(!showLeft)} className="bg-white p-3 rounded-2xl shadow-sm text-sky-500 hover:text-sky-700 hover:scale-105 transition-all"><Icons.List/></button>
+                                <input value={roomName} onChange={e=>setRoomName(e.target.value)} className="text-xl md:text-2xl font-black text-slate-700 bg-transparent hover:bg-white/50 rounded-xl px-3 -ml-2 cursor-pointer w-full max-w-[200px] truncate transition-all border-2 border-transparent focus:border-sky-200 focus:bg-white" />
+                                <div className="relative hidden md:block group flex-1 max-w-xs"><input className="pl-10 pr-4 py-2.5 bg-white/80 border-2 border-transparent rounded-2xl text-sm w-full focus:border-sky-200 transition-all shadow-sm font-bold text-slate-600 placeholder-slate-400" placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /><div className="absolute left-3 top-3 text-sky-300 group-hover:text-sky-500 transition-colors"><Icons.Search/></div></div>
+                            </div>
+                            <div className="flex gap-2 md:gap-3">
+                                <button onClick={exportData} title="Save" className="bg-white p-3 rounded-2xl shadow-sm text-slate-400 hover:text-indigo-500 hover:-translate-y-1 transition-all"><Icons.Download/></button>
+                                <button onClick={triggerImport} title="Load" className="bg-white p-3 rounded-2xl shadow-sm text-slate-400 hover:text-indigo-500 hover:-translate-y-1 transition-all"><Icons.Upload/></button>
+                                <button onClick={()=>setShowStats(true)} className="hidden md:flex bg-white text-slate-600 px-4 py-2.5 rounded-2xl text-sm font-bold shadow-sm items-center gap-2 hover:bg-slate-50 border-2 border-transparent hover:border-slate-100 transition-all">List</button>
+                                <button onClick={addFurniture} className="bg-indigo-600 text-white px-4 md:px-5 py-2.5 rounded-2xl text-sm font-bold shadow-pop btn-pop flex items-center gap-2"><span>+</span> <span className="hidden md:inline">Furniture</span></button>
+                                <button onClick={()=>setShowRight(!showRight)} className="bg-white p-3 rounded-2xl shadow-sm text-sky-500 hover:text-sky-700 hover:scale-105 transition-all ml-2">🛍️</button>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-auto p-4 md:p-12 relative">
+                            <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: 'fit-content' }} className="min-w-full min-h-full pb-32">
+                                <div className="flex flex-wrap items-start content-start gap-12">
+                                    {furniture.map(f => {
+                                        const isCol = collapsed[f.id];
+                                        return (
+                                            <div key={f.id} className={`w-[350px] md:w-[400px] bg-white rounded-3xl shadow-[8px_8px_0px_#cbd5e1] border-2 border-slate-200 overflow-hidden group/furn transition-all hover:-translate-y-1 ${getHighlightClass(f)}`}>
+                                                <div className="px-6 py-4 border-b-2 border-slate-100 flex justify-between items-center bg-slate-50/50 cursor-pointer" onClick={()=>toggleCollapse(f.id)}>
+                                                    <h3 className="font-bold text-slate-700 text-lg tracking-tight">{f.name}</h3>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={(e)=>{e.stopPropagation(); delFurniture(f.id)}} className="opacity-0 group-hover/furn:opacity-100 text-slate-300 hover:text-red-400 p-2"><Icons.Trash/></button>
+                                                    </div>
+                                                </div>
+                                                {!isCol && <div className="divide-y-2 divide-slate-50">
+                                                    {f.compartments.map((comp, idx) => {
+                                                        const usedWidth = calculateUsedWidth(comp.contents);
+                                                        const isOver = comp.widthLimit > 0 && usedWidth > comp.widthLimit;
+                                                        return (
+                                                            <div key={comp.id} onDragOver={handleDragOver} onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDrop={(e)=>{handleDropCleanup(e); dropOnCompartment(e, f.id, comp.id)}} 
+                                                                 className={`p-6 transition-all duration-200 min-h-[160px] ${getHighlightClass(comp)} ${isOver ? 'warn-overflow' : ''}`}>
+                                                                <div className="flex justify-between items-center mb-4">
+                                                                    <div className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 px-2 py-1 rounded-lg -ml-2 transition-colors" onClick={()=>editCompartment(f.id, comp.id, comp.name, comp.widthLimit)}><span className="text-xs font-bold text-slate-400 uppercase tracking-widest">{comp.name}</span><span className="text-slate-300"><Icons.Edit/></span></div>
+                                                                    <div className={`text-xs font-bold px-2 py-1 rounded-lg ${isOver ? 'bg-red-100 text-red-500' : 'bg-slate-100 text-slate-400'}`}>{usedWidth}cm {comp.widthLimit > 0 ? `/ ${comp.widthLimit}` : ''}</div>
+                                                                </div>
+                                                                <div className="flex flex-wrap gap-4 items-start">
+                                                                    {comp.contents.length === 0 && <div className="w-full h-24 border-4 border-dashed border-slate-100 rounded-2xl flex flex-col items-center justify-center text-slate-300 gap-1 pointer-events-none"><span className="text-3xl opacity-50">+</span></div>}
+                                                                    {comp.contents.map(obj => {
+                                                                        if(obj.type === 'item') {
+                                                                            return <div key={obj.id} draggable onDragStart={e=>handleDragStart(e,'PLACED_ITEM',obj, {sourceFId:f.id, sourceCId:comp.id})} className={`drag-card bg-white border-2 border-slate-200 px-4 py-2.5 rounded-xl shadow-sm text-sm font-bold text-slate-600 flex gap-2 items-center hover:border-indigo-300 hover:text-indigo-500 ${getHighlightClass(obj)}`}><span className="text-slate-300"><Icons.Grip/></span><span className="pointer-events-none">{obj.text}</span><button onClick={()=>renamePlacedItem(f.id, comp.id, null, obj.id, obj.text)} className="pointer-events-auto ml-auto text-slate-300 hover:text-indigo-500"><Icons.Edit/></button></div>
+                                                                        }
+                                                                        if(obj.type === 'box') {
+                                                                            const dims = formatDims(obj.dims);
+                                                                            return (
+                                                                                <div key={obj.instanceId} draggable onDragStart={e=>handleDragStart(e,'PLACED_BOX',obj, {sourceFId:f.id, sourceCId:comp.id})} onDragOver={(e)=>{e.preventDefault();}} onDrop={(e)=>dropOnBox(e, f.id, comp.id, obj.instanceId)} className={`drag-card ${obj.color} border-2 border-transparent p-4 rounded-2xl min-w-[150px] flex flex-col shadow-sm hover:shadow-lg transition-all ${getHighlightClass(obj)}`}>
+                                                                                    <div className="flex justify-between items-start mb-2 border-b border-black/5 pb-2">
+                                                                                        <div><div className="text-[11px] font-black uppercase text-slate-600/80 tracking-wide pointer-events-none">{obj.name}</div><div className="text-[10px] text-slate-500 font-bold opacity-60 pointer-events-none">{dims}</div></div>
+                                                                                        <div className="flex gap-1"><button onClick={()=>editPlacedBox(f.id, comp.id, obj.instanceId, obj.name, obj.dims)} className="pointer-events-auto text-slate-400 hover:text-indigo-600"><Icons.Edit/></button><button onClick={()=>removePlacedBox(f.id, comp.id, obj.instanceId)} className="pointer-events-auto text-slate-400 hover:text-red-500"><Icons.Trash/></button></div>
+                                                                                    </div>
+                                                                                    <div className="space-y-2 min-h-[40px]">{obj.items.map(item => (<div key={item.id} draggable onDragStart={e=>handleDragStart(e,'PLACED_ITEM',item, {sourceFId:f.id, sourceCId:comp.id, sourceBoxId:obj.instanceId})} className={`drag-card bg-white/90 backdrop-blur-sm text-xs font-bold text-slate-600 px-3 py-2 rounded-lg flex justify-between items-center border border-white/50 hover:border-indigo-200 shadow-sm ${getHighlightClass(item)}`}><span className="pointer-events-none">{item.text}</span><button onClick={()=>renamePlacedItem(f.id, comp.id, obj.instanceId, item.id, item.text)} className="pointer-events-auto text-slate-300 hover:text-indigo-500"><Icons.Edit/></button></div>))}</div>
+                                                                                </div>
+                                                                            )
+                                                                        }
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-md rounded-2xl shadow-xl border border-white p-2 flex items-center gap-2 z-50 hover:scale-105 transition-transform">
+                            <button onClick={zoomOut} className="p-2 hover:bg-sky-50 rounded-xl text-sky-400"><Icons.ZoomOut/></button>
+                            <span className="text-xs font-bold w-12 text-center text-slate-500">{Math.round(zoom*100)}%</span>
+                            <button onClick={zoomIn} className="p-2 hover:bg-sky-50 rounded-xl text-sky-400"><Icons.ZoomIn/></button>
+                            <div className="w-0.5 h-4 bg-slate-100 mx-1"></div>
+                            <button onClick={()=>setZoom(1)} className="text-[10px] font-bold px-4 py-2 bg-slate-100 hover:bg-indigo-100 hover:text-indigo-500 rounded-xl text-slate-500 transition-colors">RESET</button>
+                        </div>
+                         <div className="absolute bottom-10 right-10 z-50"><button onClick={resetData} className="text-xs font-bold text-red-400 bg-white/80 backdrop-blur px-5 py-3 rounded-2xl border-2 border-red-50 shadow-lg hover:bg-red-50 flex items-center gap-2 transition-all hover:-translate-y-1"><Icons.Refresh/> Reset All</button></div>
+                    </div>
+
+                    {/* RIGHT SIDEBAR (Blue Tones) */}
+                    <div className={`bg-white/80 backdrop-blur-md border-l border-sky-100 shadow-xl z-30 sidebar-transition absolute right-0 h-full md:relative flex flex-col ${showRight ? 'w-72' : 'w-0 overflow-hidden'}`}>
+                        <div className="p-6 min-w-[288px]"><h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">🛍️ Shop</h3>
+                        <div className="space-y-3 bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-sm">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Create Box</div>
+                            <input className="w-full text-xs bg-slate-50 border-2 border-transparent focus:border-sky-200 rounded-xl px-3 py-2 transition-all font-bold text-slate-600" placeholder="Name (e.g. Basket)" value={cName} onChange={e=>setCName(e.target.value)} />
+                            <div className="grid grid-cols-3 gap-2">
+                                <input className="text-xs bg-slate-50 border-2 border-transparent focus:border-sky-200 rounded-xl px-1 py-2 text-center font-bold" placeholder="W" value={cDims.w} onChange={e=>setCDims({...cDims, w:e.target.value})} />
+                                <input className="text-xs bg-slate-50 border-2 border-transparent focus:border-sky-200 rounded-xl px-1 py-2 text-center font-bold" placeholder="D" value={cDims.l} onChange={e=>setCDims({...cDims, l:e.target.value})} />
+                                <input className="text-xs bg-slate-50 border-2 border-transparent focus:border-sky-200 rounded-xl px-1 py-2 text-center font-bold" placeholder="H" value={cDims.h} onChange={e=>setCDims({...cDims, h:e.target.value})} />
+                            </div>
+                            <button className="w-full bg-slate-800 text-white text-xs font-bold px-3 py-3 rounded-xl hover:bg-black transition-colors shadow-lg" onClick={addShop}>Add to Shop</button>
+                        </div></div>
+                        <div className="flex-1 overflow-y-auto p-6 pt-0 space-y-4 min-w-[288px]">
+                            {shop.map(box => (<div key={box.id} draggable onDragStart={e=>handleDragStart(e,'BOX_TEMPLATE',box)} className="drag-card group relative bg-white border-2 border-slate-100 p-5 rounded-3xl hover:border-sky-300 hover:shadow-lg transition-all cursor-grab active:cursor-grabbing"><div className="h-1.5 w-10 bg-sky-100 rounded-full mb-3 pointer-events-none"></div><h4 className="font-bold text-sm text-slate-700 pointer-events-none">{box.name}</h4><p className="text-[11px] font-bold text-slate-400 mt-1 pointer-events-none">{formatDims(box.dims)} cm</p><div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={()=>editShopItem(box.id)} className="pointer-events-auto text-slate-300 hover:text-indigo-500"><Icons.Edit/></button><button onClick={()=>delShop(box.id)} className="pointer-events-auto text-slate-300 hover:text-red-500"><Icons.Trash/></button></div></div>))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
