@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Room_OS v31 (Mobile)</title>
+    <title>Room_OS v32 (Mobile Smart)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -13,7 +13,6 @@
     <script src="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/scroll-behaviour.min.js"></script>
     <script>
-        // Activate Mobile Dragging
         MobileDragDrop.polyfill({
             dragImageCenterOnTouch: true,
             iterationInterval: 50
@@ -27,11 +26,8 @@
         ::-webkit-scrollbar-track { background: transparent; } 
         ::-webkit-scrollbar-thumb { background: #bfdbfe; border-radius: 10px; }
         
-        /* Dragging visuals */
         .drag-card { cursor: grab; user-select: none; transition: transform 0.1s; touch-action: none; -webkit-touch-callout: none; } 
         .drag-card:active { cursor: grabbing; transform: scale(1.05); z-index: 99; opacity: 0.9; }
-        
-        /* Prevent text selection on mobile */
         .drag-card * { pointer-events: none; user-select: none; -webkit-user-select: none; }
         .drag-card button { pointer-events: auto; } 
 
@@ -43,11 +39,20 @@
         .toast-enter { animation: slideUp 0.3s ease-out forwards; }
         
         .warn-overflow { border: 3px dashed #ef4444 !important; background-color: #fef2f2; }
-        
-        /* Clearer Drop Zone */
         .drop-active { background-color: #eff6ff !important; border: 3px dashed #60a5fa !important; transform: scale(1.01); }
         
         input:focus { outline: none; border-color: #60a5fa; }
+
+        /* Mobile Sidebar Transitions */
+        .sidebar-mobile { position: fixed; top: 0; bottom: 0; z-index: 40; transition: transform 0.3s ease-in-out; width: 85%; max-width: 320px; background: white; }
+        .sidebar-left-closed { transform: translateX(-100%); }
+        .sidebar-left-open { transform: translateX(0); }
+        .sidebar-right-closed { transform: translateX(100%); }
+        .sidebar-right-open { transform: translateX(0); }
+        
+        /* Backdrop */
+        .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 35; backdrop-filter: blur(2px); animation: fadeIn 0.2s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     </style>
 </head>
 <body>
@@ -73,7 +78,8 @@
             Download: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>,
             Upload: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>,
             List: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>,
-            Help: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+            Help: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>,
+            X: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         };
 
         const DEFAULT_SHOP = [
@@ -82,22 +88,17 @@
         ];
 
         const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
-        const loadState = (key, def) => { 
-            try { 
-                const s = localStorage.getItem(key); 
-                return (s && s !== "undefined" && s !== "null") ? JSON.parse(s) : def; 
-            } catch { return def; } 
-        };
+        const loadState = (key, def) => { try { const s = localStorage.getItem(key); return (s && s !== "undefined" && s !== "null") ? JSON.parse(s) : def; } catch { return def; } };
 
         function App() {
-            // STATE (V31 keys for mobile safety)
-            const [roomName, setRoomName] = useState(() => loadState('v31_roomname', "My Chill Room"));
-            const [inventory, setInventory] = useState(() => loadState('v31_inventory', [{id: 1, text: "Plushie"}, {id: 2, text: "Headphones"}]));
+            // STATE (V32)
+            const [roomName, setRoomName] = useState(() => loadState('v32_roomname', "My Chill Room"));
+            const [inventory, setInventory] = useState(() => loadState('v32_inventory', [{id: 1, text: "Plushie"}, {id: 2, text: "Headphones"}]));
             const [furniture, setFurniture] = useState(() => {
-                const data = loadState('v31_furniture', []);
+                const data = loadState('v32_furniture', []);
                 return data.map(f => ({...f, compartments: f.compartments.map(c => ({...c, contents: c.contents.map(obj => (obj.type==='box' && !obj.items) ? {...obj, items:[]} : obj) }))}));
             }); 
-            const [shop, setShop] = useState(() => loadState('v31_shop', DEFAULT_SHOP));
+            const [shop, setShop] = useState(() => loadState('v32_shop', DEFAULT_SHOP));
             
             const [newItemText, setNewItemText] = useState("");
             const [saveStatus, setSaveStatus] = useState("Saved");
@@ -108,26 +109,33 @@
             const [showHelp, setShowHelp] = useState(false);
             const [toast, setToast] = useState(null);
             
-            // On Mobile, defaults to hiding sidebars to save space
-            const [showLeft, setShowLeft] = useState(window.innerWidth > 768);
-            const [showRight, setShowRight] = useState(window.innerWidth > 768);
+            // SIDEBAR LOGIC (Desktop vs Mobile)
+            const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+            const [showLeft, setShowLeft] = useState(!isMobile);
+            const [showRight, setShowRight] = useState(!isMobile);
+            
             const fileInputRef = useRef(null);
-
             const [cName, setCName] = useState("");
             const [cDims, setCDims] = useState({l:"", w:"", h:""});
 
+            // Effect to track window size
+            useEffect(() => {
+                const handleResize = () => setIsMobile(window.innerWidth < 768);
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
+            }, []);
+
             // Persistence
             useEffect(() => {
-                localStorage.setItem('v31_roomname', JSON.stringify(roomName));
-                localStorage.setItem('v31_inventory', JSON.stringify(inventory));
-                localStorage.setItem('v31_furniture', JSON.stringify(furniture));
-                localStorage.setItem('v31_shop', JSON.stringify(shop));
-                setSaveStatus("Saved");
+                localStorage.setItem('v32_roomname', JSON.stringify(roomName));
+                localStorage.setItem('v32_inventory', JSON.stringify(inventory));
+                localStorage.setItem('v32_furniture', JSON.stringify(furniture));
+                localStorage.setItem('v32_shop', JSON.stringify(shop));
             }, [roomName, inventory, furniture, shop]);
 
             const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
-            // Math
+            // Math & Search Helpers
             const calculateUsedWidth = (contents) => {
                 if(!contents) return 0;
                 return contents.reduce((acc, obj) => {
@@ -136,11 +144,8 @@
                 }, 0);
             };
             const formatDims = (dims) => dims ? `${dims.w||'?'}x${dims.l||'?'}x${dims.h||'?'}` : "";
-
-            // Search
             const hasMatch = (obj, term) => {
                 if (!term) return true;
-                if (!obj) return false;
                 const t = term.toLowerCase();
                 if (obj.name && obj.name.toLowerCase().includes(t)) return true;
                 if (obj.text && obj.text.toLowerCase().includes(t)) return true;
@@ -167,17 +172,20 @@
             const removePlacedBox = (fId, cId, bId) => { if(!confirm("Unpack box?")) return; const newF=deepClone(furniture); const c=newF.find(x=>x.id===fId).compartments.find(x=>x.id===cId); const idx=c.contents.findIndex(x=>x.instanceId===bId); if(idx>-1){ const box=c.contents[idx]; const items=Array.isArray(box.items)?box.items:[]; setInventory(p=>[...p,...items]); c.contents.splice(idx,1); setFurniture(newF); showToast("📦 Unpacked!"); } };
             const editPlacedBox = (fId, cId, bId, name, dims) => { const n=prompt("Name:", name); if(n!==null){ const w=prompt("Width:", dims.w||""); const newF=deepClone(furniture); const b=newF.find(x=>x.id===fId).compartments.find(x=>x.id===cId).contents.find(x=>x.instanceId===bId); b.name=n; if(!b.dims)b.dims={}; b.dims.w=w; setFurniture(newF); } };
 
-            // --- DRAG HANDLERS (UNIVERSAL FIX) ---
+            // --- DRAG HANDLERS ---
             const handleDragStart = (e, type, data, ctx={}) => { 
                 e.stopPropagation(); 
                 e.dataTransfer.setData("text/plain", JSON.stringify({...data, type, ...ctx})); 
                 e.dataTransfer.effectAllowed = "move";
+                
+                // MOBILE FIX: Auto-close sidebars when dragging starts
+                if (window.innerWidth < 768) {
+                    setShowLeft(false);
+                    setShowRight(false);
+                }
             };
             
-            const handleDragOver = (e) => { 
-                e.preventDefault(); 
-                e.dataTransfer.dropEffect = "move"; 
-            };
+            const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }; 
             const handleDragEnter = (e) => { e.preventDefault(); e.currentTarget.classList.add("drop-active"); };
             const handleDragLeave = (e) => { e.preventDefault(); e.currentTarget.classList.remove("drop-active"); };
             const handleDropCleanup = (e) => { e.currentTarget.classList.remove("drop-active"); };
@@ -225,75 +233,51 @@
                 return { boxCounts, totalItems, furnitureCount, copyList };
             };
 
+            // Overlay Click Handler
+            const closeAllSidebars = () => { setShowLeft(false); setShowRight(false); };
+
             return (
                 <div className="flex h-screen overflow-hidden text-slate-800 bg-dots font-sans">
                     <input type="file" ref={fileInputRef} onChange={importData} className="hidden" accept=".json" />
                     
                     {toast && <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-white text-indigo-600 border-2 border-indigo-200 px-6 py-2 rounded-full shadow-xl z-[100] flex items-center gap-2 text-sm font-bold toast-enter"><span>🧊</span> {toast}</div>}
 
-                    {showStats && (
-                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm border-2 border-indigo-200 animate-enter">
-                                <h2 className="text-xl font-bold text-indigo-600 mb-4 flex items-center gap-2"><Icons.List/> Shopping List</h2>
-                                <div className="bg-indigo-50 rounded-2xl p-4 mb-4 max-h-[50vh] overflow-y-auto">
-                                    {Object.entries(generateStats().boxCounts).length === 0 ? <p className="text-sm text-indigo-400 italic text-center">Your shopping list is empty!</p> : 
-                                    Object.entries(generateStats().boxCounts).map(([n,c])=>(<div key={n} className="flex justify-between py-2 border-b border-indigo-100 last:border-0"><span className="text-sm font-bold text-slate-700">{n}</span><span className="bg-white text-indigo-600 text-xs font-black px-2 py-1 rounded-full border border-indigo-200">{c}x</span></div>))}
-                                </div>
-                                <div className="flex gap-2"><button onClick={generateStats().copyList} className="flex-1 bg-indigo-500 hover:bg-indigo-600 text-white py-3 rounded-2xl font-bold text-sm shadow-pop btn-pop">Copy List</button><button onClick={()=>setShowStats(false)} className="px-6 bg-white hover:bg-slate-50 text-slate-500 border-2 border-slate-200 rounded-2xl font-bold text-sm transition-colors">Close</button></div>
-                            </div>
-                        </div>
-                    )}
-                    
-                    {showHelp && (
-                        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                            <div className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-sm border-2 border-sky-200 animate-enter">
-                                <h2 className="text-2xl font-bold text-sky-600 mb-2">Welcome! ☁️</h2>
-                                <p className="text-sm text-slate-500 mb-6">Let's organize {roomName}.</p>
-                                <ul className="space-y-4 text-sm text-slate-600 mb-8">
-                                    <li className="flex gap-3 items-center"><span className="bg-indigo-100 p-2 rounded-xl text-indigo-500"><Icons.Plus/></span> <span>Add items on the left.</span></li>
-                                    <li className="flex gap-3 items-center"><span className="bg-sky-100 p-2 rounded-xl text-sky-500"><Icons.Edit/></span> <span>Drag & Drop to organize.</span></li>
-                                    <li className="flex gap-3 items-center"><span className="bg-blue-100 p-2 rounded-xl text-blue-500"><Icons.List/></span> <span>Export your shopping list!</span></li>
-                                </ul>
-                                <button onClick={()=>setShowHelp(false)} className="w-full bg-sky-500 hover:bg-sky-600 text-white py-3 rounded-2xl font-bold shadow-pop btn-pop">Let's Start!</button>
-                            </div>
-                        </div>
-                    )}
+                    {/* BACKDROP FOR MOBILE */}
+                    {(showLeft || showRight) && isMobile && <div className="backdrop" onClick={closeAllSidebars}></div>}
 
-                    {/* LEFT SIDEBAR (Blue Tones) */}
-                    <div className={`bg-white/80 backdrop-blur-md border-r border-sky-100 flex flex-col z-30 shadow-xl sidebar-transition absolute md:relative h-full ${showLeft ? 'w-80' : 'w-0 overflow-hidden'}`}>
-                        <div className="p-6 min-w-[320px]"><h2 className="font-bold text-xl text-sky-600 flex items-center gap-2 mb-4">Inventory <span className="bg-sky-100 text-xs px-2 py-1 rounded-full text-sky-700">{inventory.length}</span></h2>
-                        <form onSubmit={addInv} className="flex gap-2"><input className="flex-1 bg-white border-2 border-sky-100 rounded-xl px-4 py-2 text-sm focus:border-sky-300 transition-colors" placeholder="New Item..." value={newItemText} onChange={e=>setNewItemText(e.target.value)} /><button className="bg-sky-500 text-white p-2.5 rounded-xl hover:bg-sky-600 shadow-sm transition-transform active:scale-90"><Icons.Plus/></button></form></div>
+                    {/* LEFT SIDEBAR */}
+                    <div className={`bg-white/95 backdrop-blur-md border-r border-sky-100 flex flex-col z-40 shadow-2xl sidebar-transition ${isMobile ? 'sidebar-mobile sidebar-left' : 'relative w-80'} ${showLeft ? (isMobile ? 'sidebar-left-open' : '') : (isMobile ? 'sidebar-left-closed' : 'w-0 overflow-hidden border-none')}`}>
+                        <div className="p-6 min-w-[320px] relative">
+                            <h2 className="font-bold text-xl text-sky-600 flex items-center gap-2 mb-4">Inventory <span className="bg-sky-100 text-xs px-2 py-1 rounded-full text-sky-700">{inventory.length}</span></h2>
+                            {isMobile && <button onClick={()=>setShowLeft(false)} className="absolute top-6 right-6 text-slate-400 p-2"><Icons.X/></button>}
+                            <form onSubmit={addInv} className="flex gap-2"><input className="flex-1 bg-white border-2 border-sky-100 rounded-xl px-4 py-2 text-sm focus:border-sky-300 transition-colors" placeholder="New Item..." value={newItemText} onChange={e=>setNewItemText(e.target.value)} /><button className="bg-sky-500 text-white p-2.5 rounded-xl hover:bg-sky-600 shadow-sm transition-transform active:scale-90"><Icons.Plus/></button></form>
+                        </div>
                         <div className="flex-1 overflow-y-auto p-4 space-y-3 min-w-[320px]">
-                            {inventory.map(i => (<div key={i.id} draggable onDragStart={e=>handleDragStart(e,'ITEM',i, {sourceType:'INVENTORY'})} className={`drag-card group flex items-center gap-3 bg-white border-2 border-slate-100 p-3 rounded-2xl hover:border-sky-300 hover:shadow-lg ${getHighlightClass(i)}`}><span className="text-sky-300"><Icons.Grip /></span><span className="text-sm font-bold text-slate-600 flex-1 truncate">{i.text}</span><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={()=>renInv(i.id)} className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg"><Icons.Edit/></button><button onClick={()=>delInv(i.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Icons.Trash/></button></div></div>))}
+                            {inventory.map(i => (<div key={i.id} draggable onDragStart={e=>handleDragStart(e,'ITEM',i, {sourceType:'INVENTORY'})} className={`drag-card group flex items-center gap-3 bg-white border-2 border-slate-100 p-3 rounded-2xl hover:border-sky-300 hover:shadow-lg ${getHighlightClass(i)}`}><span className="text-sky-300"><Icons.Grip /></span><span className="pointer-events-none text-sm font-bold text-slate-600 flex-1 truncate">{i.text}</span><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={()=>renInv(i.id)} className="pointer-events-auto p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg"><Icons.Edit/></button><button onClick={()=>delInv(i.id)} className="pointer-events-auto p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Icons.Trash/></button></div></div>))}
                         </div>
                     </div>
 
                     {/* CENTER CANVAS */}
                     <div className="flex-1 bg-dots relative flex flex-col h-screen overflow-hidden">
-                        {/* HEADER */}
                         <div className="h-20 flex justify-between items-center px-4 md:px-8 gap-4 z-20 shrink-0">
-                            <div className="flex items-center gap-4 flex-1">
-                                <button onClick={()=>setShowLeft(!showLeft)} className="bg-white p-3 rounded-2xl shadow-sm text-sky-500 hover:text-sky-700 hover:scale-105 transition-all"><Icons.List/></button>
-                                <input value={roomName} onChange={e=>setRoomName(e.target.value)} className="text-xl md:text-2xl font-black text-slate-700 bg-transparent hover:bg-white/50 rounded-xl px-3 -ml-2 cursor-pointer w-full max-w-[200px] truncate transition-all border-2 border-transparent focus:border-sky-200 focus:bg-white" />
-                                <div className="relative hidden md:block group flex-1 max-w-xs"><input className="pl-10 pr-4 py-2.5 bg-white/80 border-2 border-transparent rounded-2xl text-sm w-full focus:border-sky-200 transition-all shadow-sm font-bold text-slate-600 placeholder-slate-400" placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /><div className="absolute left-3 top-3 text-sky-300 group-hover:text-sky-500 transition-colors"><Icons.Search/></div></div>
+                            <div className="flex items-center gap-2 md:gap-4 flex-1">
+                                <button onClick={()=>setShowLeft(!showLeft)} className={`p-3 rounded-2xl shadow-sm transition-all ${showLeft ? 'bg-sky-100 text-sky-600' : 'bg-white text-sky-500 hover:scale-105'}`}><Icons.List/></button>
+                                <input value={roomName} onChange={e=>setRoomName(e.target.value)} className="text-lg md:text-2xl font-black text-slate-700 bg-transparent hover:bg-white/50 rounded-xl px-2 -ml-2 cursor-pointer w-full max-w-[150px] md:max-w-[200px] truncate transition-all border-2 border-transparent focus:border-sky-200 focus:bg-white" />
                             </div>
-                            <div className="flex gap-2 md:gap-3">
-                                <button onClick={exportData} title="Save" className="bg-white p-3 rounded-2xl shadow-sm text-slate-400 hover:text-indigo-500 hover:-translate-y-1 transition-all"><Icons.Download/></button>
-                                <button onClick={triggerImport} title="Load" className="bg-white p-3 rounded-2xl shadow-sm text-slate-400 hover:text-indigo-500 hover:-translate-y-1 transition-all"><Icons.Upload/></button>
-                                <button onClick={()=>setShowStats(true)} className="hidden md:flex bg-white text-slate-600 px-4 py-2.5 rounded-2xl text-sm font-bold shadow-sm items-center gap-2 hover:bg-slate-50 border-2 border-transparent hover:border-slate-100 transition-all">List</button>
-                                <button onClick={addFurniture} className="bg-indigo-600 text-white px-4 md:px-5 py-2.5 rounded-2xl text-sm font-bold shadow-pop btn-pop flex items-center gap-2"><span>+</span> <span className="hidden md:inline">Furniture</span></button>
-                                <button onClick={()=>setShowRight(!showRight)} className="bg-white p-3 rounded-2xl shadow-sm text-sky-500 hover:text-sky-700 hover:scale-105 transition-all ml-2">🛍️</button>
+                            <div className="flex gap-2">
+                                <button onClick={addFurniture} className="bg-indigo-600 text-white px-4 py-2.5 rounded-2xl text-sm font-bold shadow-pop btn-pop flex items-center gap-2"><span>+</span> <span className="hidden md:inline">Furniture</span></button>
+                                <button onClick={()=>setShowRight(!showRight)} className={`p-3 rounded-2xl shadow-sm transition-all ml-1 ${showRight ? 'bg-sky-100 text-sky-600' : 'bg-white text-sky-500 hover:scale-105'}`}>🛍️</button>
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-auto p-4 md:p-12 relative">
+                        <div className="flex-1 overflow-auto p-4 md:p-12 relative" onClick={closeAllSidebars}>
                             <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: 'fit-content' }} className="min-w-full min-h-full pb-32">
                                 <div className="flex flex-wrap items-start content-start gap-12">
                                     {furniture.map(f => {
                                         const isCol = collapsed[f.id];
                                         return (
-                                            <div key={f.id} className={`w-[350px] md:w-[400px] bg-white rounded-3xl shadow-[8px_8px_0px_#cbd5e1] border-2 border-slate-200 overflow-hidden group/furn transition-all hover:-translate-y-1 ${getHighlightClass(f)}`}>
-                                                <div className="px-6 py-4 border-b-2 border-slate-100 flex justify-between items-center bg-slate-50/50 cursor-pointer" onClick={()=>toggleCollapse(f.id)}>
+                                            <div key={f.id} className={`w-[340px] md:w-[400px] bg-white rounded-3xl shadow-[8px_8px_0px_#cbd5e1] border-2 border-slate-200 overflow-hidden group/furn transition-all hover:-translate-y-1 ${getHighlightClass(f)}`}>
+                                                <div className="px-6 py-4 border-b-2 border-slate-100 flex justify-between items-center bg-slate-50/50 cursor-pointer" onClick={(e)=>{e.stopPropagation(); toggleCollapse(f.id)}}>
                                                     <h3 className="font-bold text-slate-700 text-lg tracking-tight">{f.name}</h3>
                                                     <div className="flex gap-2">
                                                         <button onClick={(e)=>{e.stopPropagation(); delFurniture(f.id)}} className="opacity-0 group-hover/furn:opacity-100 text-slate-300 hover:text-red-400 p-2"><Icons.Trash/></button>
@@ -341,29 +325,31 @@
                             </div>
                         </div>
 
-                        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-md rounded-2xl shadow-xl border border-white p-2 flex items-center gap-2 z-50 hover:scale-105 transition-transform">
+                        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-white/80 backdrop-blur-md rounded-2xl shadow-xl border border-white p-2 flex items-center gap-2 z-50 hover:scale-105 transition-transform no-print">
                             <button onClick={zoomOut} className="p-2 hover:bg-sky-50 rounded-xl text-sky-400"><Icons.ZoomOut/></button>
                             <span className="text-xs font-bold w-12 text-center text-slate-500">{Math.round(zoom*100)}%</span>
                             <button onClick={zoomIn} className="p-2 hover:bg-sky-50 rounded-xl text-sky-400"><Icons.ZoomIn/></button>
                             <div className="w-0.5 h-4 bg-slate-100 mx-1"></div>
                             <button onClick={()=>setZoom(1)} className="text-[10px] font-bold px-4 py-2 bg-slate-100 hover:bg-indigo-100 hover:text-indigo-500 rounded-xl text-slate-500 transition-colors">RESET</button>
                         </div>
-                         <div className="absolute bottom-10 right-10 z-50"><button onClick={resetData} className="text-xs font-bold text-red-400 bg-white/80 backdrop-blur px-5 py-3 rounded-2xl border-2 border-red-50 shadow-lg hover:bg-red-50 flex items-center gap-2 transition-all hover:-translate-y-1"><Icons.Refresh/> Reset All</button></div>
                     </div>
 
-                    {/* RIGHT SIDEBAR (Blue Tones) */}
-                    <div className={`bg-white/80 backdrop-blur-md border-l border-sky-100 shadow-xl z-30 sidebar-transition absolute right-0 h-full md:relative flex flex-col ${showRight ? 'w-72' : 'w-0 overflow-hidden'}`}>
-                        <div className="p-6 min-w-[288px]"><h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">🛍️ Shop</h3>
-                        <div className="space-y-3 bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-sm">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Create Box</div>
-                            <input className="w-full text-xs bg-slate-50 border-2 border-transparent focus:border-sky-200 rounded-xl px-3 py-2 transition-all font-bold text-slate-600" placeholder="Name (e.g. Basket)" value={cName} onChange={e=>setCName(e.target.value)} />
-                            <div className="grid grid-cols-3 gap-2">
-                                <input className="text-xs bg-slate-50 border-2 border-transparent focus:border-sky-200 rounded-xl px-1 py-2 text-center font-bold" placeholder="W" value={cDims.w} onChange={e=>setCDims({...cDims, w:e.target.value})} />
-                                <input className="text-xs bg-slate-50 border-2 border-transparent focus:border-sky-200 rounded-xl px-1 py-2 text-center font-bold" placeholder="D" value={cDims.l} onChange={e=>setCDims({...cDims, l:e.target.value})} />
-                                <input className="text-xs bg-slate-50 border-2 border-transparent focus:border-sky-200 rounded-xl px-1 py-2 text-center font-bold" placeholder="H" value={cDims.h} onChange={e=>setCDims({...cDims, h:e.target.value})} />
+                    {/* RIGHT SIDEBAR */}
+                    <div className={`bg-white/95 backdrop-blur-md border-l border-sky-100 flex flex-col z-40 shadow-2xl sidebar-transition ${isMobile ? 'sidebar-mobile sidebar-right' : 'relative w-72'} ${showRight ? (isMobile ? 'sidebar-right-open' : '') : (isMobile ? 'sidebar-right-closed' : 'w-0 overflow-hidden border-none')}`}>
+                        <div className="p-6 min-w-[288px] relative">
+                            <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 mb-4">🛍️ Shop</h3>
+                            {isMobile && <button onClick={()=>setShowRight(false)} className="absolute top-6 right-6 text-slate-400 p-2"><Icons.X/></button>}
+                            <div className="space-y-3 bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-sm">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Create Box</div>
+                                <input className="w-full text-xs bg-slate-50 border-2 border-transparent focus:border-sky-200 rounded-xl px-3 py-2 transition-all font-bold text-slate-600" placeholder="Name (e.g. Basket)" value={cName} onChange={e=>setCName(e.target.value)} />
+                                <div className="grid grid-cols-3 gap-2">
+                                    <input className="text-xs bg-slate-50 border-2 border-transparent focus:border-sky-200 rounded-xl px-1 py-2 text-center font-bold" placeholder="W" value={cDims.w} onChange={e=>setCDims({...cDims, w:e.target.value})} />
+                                    <input className="text-xs bg-slate-50 border-2 border-transparent focus:border-sky-200 rounded-xl px-1 py-2 text-center font-bold" placeholder="D" value={cDims.l} onChange={e=>setCDims({...cDims, l:e.target.value})} />
+                                    <input className="text-xs bg-slate-50 border-2 border-transparent focus:border-sky-200 rounded-xl px-1 py-2 text-center font-bold" placeholder="H" value={cDims.h} onChange={e=>setCDims({...cDims, h:e.target.value})} />
+                                </div>
+                                <button className="w-full bg-slate-800 text-white text-xs font-bold px-3 py-3 rounded-xl hover:bg-black transition-colors shadow-lg" onClick={addShop}>Add to Shop</button>
                             </div>
-                            <button className="w-full bg-slate-800 text-white text-xs font-bold px-3 py-3 rounded-xl hover:bg-black transition-colors shadow-lg" onClick={addShop}>Add to Shop</button>
-                        </div></div>
+                        </div>
                         <div className="flex-1 overflow-y-auto p-6 pt-0 space-y-4 min-w-[288px]">
                             {shop.map(box => (<div key={box.id} draggable onDragStart={e=>handleDragStart(e,'BOX_TEMPLATE',box)} className="drag-card group relative bg-white border-2 border-slate-100 p-5 rounded-3xl hover:border-sky-300 hover:shadow-lg transition-all cursor-grab active:cursor-grabbing"><div className="h-1.5 w-10 bg-sky-100 rounded-full mb-3 pointer-events-none"></div><h4 className="font-bold text-sm text-slate-700 pointer-events-none">{box.name}</h4><p className="text-[11px] font-bold text-slate-400 mt-1 pointer-events-none">{formatDims(box.dims)} cm</p><div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={()=>editShopItem(box.id)} className="pointer-events-auto text-slate-300 hover:text-indigo-500"><Icons.Edit/></button><button onClick={()=>delShop(box.id)} className="pointer-events-auto text-slate-300 hover:text-red-500"><Icons.Trash/></button></div></div>))}
                         </div>
