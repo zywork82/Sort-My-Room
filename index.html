@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Room_OS v33 (Clean Layout)</title>
+    <title>Room_OS v35 (Clean Code)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -13,21 +13,43 @@
     <script src="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/index.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mobile-drag-drop@2.3.0-rc.2/scroll-behaviour.min.js"></script>
     <script>
-        // Initialize Mobile Dragging
-        MobileDragDrop.polyfill({ dragImageCenterOnTouch: true, iterationInterval: 50 });
+        // iPad Config: Wait for hold, prevent native scrolling during drag
+        var iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        
+        MobileDragDrop.polyfill({
+            dragImageCenterOnTouch: true,
+            iterationInterval: 50,
+            holdToDrag: iOS ? 300 : 100 // Wait 300ms on iPad
+        });
+
+        // Stop the screen from moving when you drag an item
+        window.addEventListener('touchmove', function() {}, {passive: false});
     </script>
 
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Quicksand', sans-serif; background-color: #f0f9ff; overflow: hidden; color: #1e293b; touch-action: pan-x pan-y; }
+        body { font-family: 'Quicksand', sans-serif; background-color: #f0f9ff; overflow: hidden; color: #1e293b; touch-action: none; }
+        
+        /* SCROLLABLE AREAS ONLY */
+        .scroll-area { overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+        
         ::-webkit-scrollbar { width: 6px; height: 6px; } 
         ::-webkit-scrollbar-track { background: transparent; } 
         ::-webkit-scrollbar-thumb { background: #bfdbfe; border-radius: 10px; }
         
-        /* Dragging visuals */
-        .drag-card { cursor: grab; user-select: none; transition: transform 0.1s; touch-action: none; -webkit-touch-callout: none; } 
+        /* DRAG CARD - iOS HARDENED */
+        .drag-card { 
+            cursor: grab; 
+            user-select: none; 
+            -webkit-user-select: none; /* Safari: Stop text selection */
+            -webkit-touch-callout: none; /* Safari: Stop long-press menu */
+            touch-action: none; /* Stop browser scrolling on this item */
+            transition: transform 0.1s; 
+        } 
         .drag-card:active { cursor: grabbing; transform: scale(1.05); z-index: 99; opacity: 0.9; }
-        .drag-card * { pointer-events: none; user-select: none; -webkit-user-select: none; }
+        
+        /* Prevent interactions on children during drag */
+        .drag-card * { pointer-events: none; }
         .drag-card button { pointer-events: auto; } 
 
         .bg-dots { background-color: #f0f9ff; background-image: radial-gradient(#bfdbfe 2px, transparent 2px); background-size: 24px 24px; }
@@ -39,23 +61,19 @@
         
         input:focus { outline: none; border-color: #60a5fa; }
 
-        /* --- NEW SIDEBAR LAYOUT ENGINE --- */
-        /* Backdrop for Mobile Only */
-        .backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); z-index: 30; backdrop-filter: blur(2px); transition: opacity 0.2s; }
+        /* SIDEBARS */
+        .backdrop { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.4); z-index: 30; backdrop-filter: blur(2px); }
+        .sidebar { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); }
         
-        /* Sidebar Base */
-        .sidebar { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); }
-        
-        /* Mobile: Fixed Off-Canvas */
         @media (max-width: 768px) {
-            .sidebar { position: fixed; top: 0; bottom: 0; z-index: 40; width: 85%; max-width: 320px; border: none; shadow: 2xl; }
+            /* FIXED CSS PROPERTY HERE */
+            .sidebar { position: fixed; top: 0; bottom: 0; z-index: 40; width: 85%; max-width: 320px; border: none; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+            
             .sidebar-left { left: 0; transform: translateX(-100%); }
             .sidebar-left.open { transform: translateX(0); }
             .sidebar-right { right: 0; transform: translateX(100%); }
             .sidebar-right.open { transform: translateX(0); }
         }
-
-        /* Desktop: Relative Flow (Pushes content) */
         @media (min-width: 768px) {
             .sidebar { position: relative; z-index: 10; height: 100%; border-color: #e0f2fe; }
             .sidebar-left { border-right-width: 1px; width: 20rem; }
@@ -76,6 +94,7 @@
         const Icons = {
             Trash: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>,
             Plus: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>,
+            Cube: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>,
             Edit: () => <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>,
             Grip: () => <svg className="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16"/></svg>,
             Refresh: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>,
@@ -99,14 +118,14 @@
         const loadState = (key, def) => { try { const s = localStorage.getItem(key); return (s && s !== "undefined" && s !== "null") ? JSON.parse(s) : def; } catch { return def; } };
 
         function App() {
-            // STATE (V33 Keys)
-            const [roomName, setRoomName] = useState(() => loadState('v33_roomname', "My Chill Room"));
-            const [inventory, setInventory] = useState(() => loadState('v33_inventory', [{id: 1, text: "Plushie"}, {id: 2, text: "Headphones"}]));
+            // STATE (V35 keys for clean state)
+            const [roomName, setRoomName] = useState(() => loadState('v35_roomname', "My Chill Room"));
+            const [inventory, setInventory] = useState(() => loadState('v35_inventory', [{id: 1, text: "Plushie"}, {id: 2, text: "Headphones"}]));
             const [furniture, setFurniture] = useState(() => {
-                const data = loadState('v33_furniture', []);
+                const data = loadState('v35_furniture', []);
                 return data.map(f => ({...f, compartments: f.compartments.map(c => ({...c, contents: c.contents.map(obj => (obj.type==='box' && !obj.items) ? {...obj, items:[]} : obj) }))}));
             }); 
-            const [shop, setShop] = useState(() => loadState('v33_shop', DEFAULT_SHOP));
+            const [shop, setShop] = useState(() => loadState('v35_shop', DEFAULT_SHOP));
             
             const [newItemText, setNewItemText] = useState("");
             const [saveStatus, setSaveStatus] = useState("Saved");
@@ -116,7 +135,7 @@
             const [showStats, setShowStats] = useState(false);
             const [toast, setToast] = useState(null);
             
-            // SIDEBAR TOGGLES
+            // SIDEBAR LOGIC
             const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
             const [showLeft, setShowLeft] = useState(window.innerWidth > 768);
             const [showRight, setShowRight] = useState(window.innerWidth > 768);
@@ -125,12 +144,11 @@
             const [cName, setCName] = useState("");
             const [cDims, setCDims] = useState({l:"", w:"", h:""});
 
-            // Monitor Resize
+            // Effect to track window size
             useEffect(() => {
                 const handleResize = () => {
                     const mobile = window.innerWidth < 768;
                     setIsMobile(mobile);
-                    // If moving from mobile to desktop, reset panels to open
                     if (!mobile && isMobile) { setShowLeft(true); setShowRight(true); }
                 };
                 window.addEventListener('resize', handleResize);
@@ -138,10 +156,10 @@
             }, [isMobile]);
 
             useEffect(() => {
-                localStorage.setItem('v33_roomname', JSON.stringify(roomName));
-                localStorage.setItem('v33_inventory', JSON.stringify(inventory));
-                localStorage.setItem('v33_furniture', JSON.stringify(furniture));
-                localStorage.setItem('v33_shop', JSON.stringify(shop));
+                localStorage.setItem('v35_roomname', JSON.stringify(roomName));
+                localStorage.setItem('v35_inventory', JSON.stringify(inventory));
+                localStorage.setItem('v35_furniture', JSON.stringify(furniture));
+                localStorage.setItem('v35_shop', JSON.stringify(shop));
             }, [roomName, inventory, furniture, shop]);
 
             const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
@@ -183,14 +201,14 @@
             const removePlacedBox = (fId, cId, bId) => { if(!confirm("Unpack box?")) return; const newF=deepClone(furniture); const c=newF.find(x=>x.id===fId).compartments.find(x=>x.id===cId); const idx=c.contents.findIndex(x=>x.instanceId===bId); if(idx>-1){ const box=c.contents[idx]; const items=Array.isArray(box.items)?box.items:[]; setInventory(p=>[...p,...items]); c.contents.splice(idx,1); setFurniture(newF); showToast("📦 Unpacked!"); } };
             const editPlacedBox = (fId, cId, bId, name, dims) => { const n=prompt("Name:", name); if(n!==null){ const w=prompt("Width:", dims.w||""); const newF=deepClone(furniture); const b=newF.find(x=>x.id===fId).compartments.find(x=>x.id===cId).contents.find(x=>x.instanceId===bId); b.name=n; if(!b.dims)b.dims={}; b.dims.w=w; setFurniture(newF); } };
 
-            // --- DRAG ---
+            // --- DRAG HANDLERS ---
             const handleDragStart = (e, type, data, ctx={}) => { 
                 e.stopPropagation(); 
                 e.dataTransfer.setData("text/plain", JSON.stringify({...data, type, ...ctx})); 
                 e.dataTransfer.effectAllowed = "move";
-                // On mobile, close sidebars when drag starts to see canvas
                 if (isMobile) { setShowLeft(false); setShowRight(false); }
             };
+            
             const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }; 
             const handleDragEnter = (e) => { e.preventDefault(); e.currentTarget.classList.add("drop-active"); };
             const handleDragLeave = (e) => { e.preventDefault(); e.currentTarget.classList.remove("drop-active"); };
@@ -248,7 +266,7 @@
                         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                             <div className="bg-white rounded-3xl shadow-2xl p-6 w-full max-w-sm border-2 border-indigo-200 animate-enter">
                                 <h2 className="text-xl font-bold text-indigo-600 mb-4 flex items-center gap-2"><Icons.List/> Shopping List</h2>
-                                <div className="bg-indigo-50 rounded-2xl p-4 mb-4 max-h-[50vh] overflow-y-auto">
+                                <div className="bg-indigo-50 rounded-2xl p-4 mb-4 max-h-[50vh] overflow-y-auto scroll-area">
                                     {Object.entries(generateStats().boxCounts).length === 0 ? <p className="text-sm text-indigo-400 italic text-center">Your shopping list is empty!</p> : 
                                     Object.entries(generateStats().boxCounts).map(([n,c])=>(<div key={n} className="flex justify-between py-2 border-b border-indigo-100 last:border-0"><span className="text-sm font-bold text-slate-700">{n}</span><span className="bg-white text-indigo-600 text-xs font-black px-2 py-1 rounded-full border border-indigo-200">{c}x</span></div>))}
                                 </div>
@@ -257,7 +275,7 @@
                         </div>
                     )}
 
-                    {/* LEFT SIDEBAR (Inventory) */}
+                    {/* LEFT SIDEBAR */}
                     <div className={`sidebar sidebar-left ${isMobile ? (showLeft ? 'sidebar-left open' : 'sidebar-left') : (showLeft ? 'w-80' : 'closed')}`}>
                         <div className="p-6 h-full flex flex-col">
                             <div className="flex justify-between items-center mb-4">
@@ -265,7 +283,7 @@
                                 <button onClick={()=>setShowLeft(false)} className="text-slate-400 p-2 hover:bg-slate-100 rounded-lg md:hidden"><Icons.X/></button>
                             </div>
                             <form onSubmit={addInv} className="flex gap-2 mb-4"><input className="flex-1 bg-white border-2 border-sky-100 rounded-xl px-4 py-2 text-sm focus:border-sky-300 transition-colors" placeholder="New Item..." value={newItemText} onChange={e=>setNewItemText(e.target.value)} /><button className="bg-sky-500 text-white p-2.5 rounded-xl hover:bg-sky-600 shadow-sm transition-transform active:scale-90"><Icons.Plus/></button></form>
-                            <div className="flex-1 overflow-y-auto space-y-3">
+                            <div className="flex-1 overflow-y-auto space-y-3 scroll-area">
                                 {inventory.map(i => (<div key={i.id} draggable onDragStart={e=>handleDragStart(e,'ITEM',i, {sourceType:'INVENTORY'})} className={`drag-card group flex items-center gap-3 bg-white border-2 border-slate-100 p-3 rounded-2xl hover:border-sky-300 hover:shadow-lg ${getHighlightClass(i)}`}><span className="text-sky-300"><Icons.Grip /></span><span className="pointer-events-none text-sm font-bold text-slate-600 flex-1 truncate">{i.text}</span><div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={()=>renInv(i.id)} className="pointer-events-auto p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg"><Icons.Edit/></button><button onClick={()=>delInv(i.id)} className="pointer-events-auto p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg"><Icons.Trash/></button></div></div>))}
                             </div>
                         </div>
@@ -274,21 +292,17 @@
                     {/* CENTER CANVAS */}
                     <div className="flex-1 bg-dots relative flex flex-col h-screen overflow-hidden">
                         <div className="h-20 flex justify-between items-center px-4 md:px-8 gap-4 z-20 shrink-0">
-                            <div className="flex items-center gap-4 flex-1">
-                                <button onClick={()=>setShowLeft(!showLeft)} className="bg-white p-3 rounded-2xl shadow-sm text-sky-500 hover:text-sky-700 hover:scale-105 transition-all"><Icons.List/></button>
-                                <input value={roomName} onChange={e=>setRoomName(e.target.value)} className="text-xl md:text-2xl font-black text-slate-700 bg-transparent hover:bg-white/50 rounded-xl px-3 -ml-2 cursor-pointer w-full max-w-[200px] truncate transition-all border-2 border-transparent focus:border-sky-200 focus:bg-white" />
-                                <div className="relative hidden md:block group flex-1 max-w-xs"><input className="pl-10 pr-4 py-2.5 bg-white/80 border-2 border-transparent rounded-2xl text-sm w-full focus:border-sky-200 transition-all shadow-sm font-bold text-slate-600 placeholder-slate-400" placeholder="Search..." value={searchTerm} onChange={e=>setSearchTerm(e.target.value)} /><div className="absolute left-3 top-3 text-sky-300 group-hover:text-sky-500 transition-colors"><Icons.Search/></div></div>
+                            <div className="flex items-center gap-2 md:gap-4 flex-1">
+                                <button onClick={()=>setShowLeft(!showLeft)} className={`p-3 rounded-2xl shadow-sm transition-all ${showLeft ? 'bg-sky-100 text-sky-600' : 'bg-white text-sky-500 hover:scale-105'}`}><Icons.List/></button>
+                                <input value={roomName} onChange={e=>setRoomName(e.target.value)} className="text-lg md:text-2xl font-black text-slate-700 bg-transparent hover:bg-white/50 rounded-xl px-2 -ml-2 cursor-pointer w-full max-w-[150px] md:max-w-[200px] truncate transition-all border-2 border-transparent focus:border-sky-200 focus:bg-white" />
                             </div>
                             <div className="flex gap-2">
-                                <button onClick={exportData} title="Save" className="bg-white p-3 rounded-2xl shadow-sm text-slate-400 hover:text-indigo-500 hover:-translate-y-1 transition-all"><Icons.Download/></button>
-                                <button onClick={triggerImport} title="Load" className="bg-white p-3 rounded-2xl shadow-sm text-slate-400 hover:text-indigo-500 hover:-translate-y-1 transition-all"><Icons.Upload/></button>
-                                <button onClick={()=>setShowStats(true)} className="hidden md:flex bg-white text-slate-600 px-4 py-2.5 rounded-2xl text-sm font-bold shadow-sm items-center gap-2 hover:bg-slate-50 border-2 border-transparent hover:border-slate-100 transition-all">List</button>
-                                <button onClick={addFurniture} className="bg-indigo-600 text-white px-4 md:px-5 py-2.5 rounded-2xl text-sm font-bold shadow-pop btn-pop flex items-center gap-2"><span>+</span> <span className="hidden md:inline">Furniture</span></button>
-                                <button onClick={()=>setShowRight(!showRight)} className="bg-white p-3 rounded-2xl shadow-sm text-sky-500 hover:text-sky-700 hover:scale-105 transition-all ml-2">🛍️</button>
+                                <button onClick={addFurniture} className="bg-indigo-600 text-white px-4 py-2.5 rounded-2xl text-sm font-bold shadow-pop btn-pop flex items-center gap-2"><span>+</span> <span className="hidden md:inline">Furniture</span></button>
+                                <button onClick={()=>setShowRight(!showRight)} className={`p-3 rounded-2xl shadow-sm transition-all ml-1 ${showRight ? 'bg-sky-100 text-sky-600' : 'bg-white text-sky-500 hover:scale-105'}`}>🛍️</button>
                             </div>
                         </div>
 
-                        <div className="flex-1 overflow-auto p-4 md:p-12 relative">
+                        <div className="flex-1 overflow-auto p-4 md:p-12 relative scroll-area" onClick={closeAllSidebars}>
                             <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: 'fit-content' }} className="min-w-full min-h-full pb-32">
                                 <div className="flex flex-wrap items-start content-start gap-12">
                                     {furniture.map(f => {
@@ -350,9 +364,10 @@
                             <div className="w-0.5 h-4 bg-slate-100 mx-1"></div>
                             <button onClick={()=>setZoom(1)} className="text-[10px] font-bold px-4 py-2 bg-slate-100 hover:bg-indigo-100 hover:text-indigo-500 rounded-xl text-slate-500 transition-colors">RESET</button>
                         </div>
+                         <div className="absolute bottom-10 right-10 z-50"><button onClick={resetData} className="text-xs font-bold text-red-400 bg-white/80 backdrop-blur px-5 py-3 rounded-2xl border-2 border-red-50 shadow-lg hover:bg-red-50 flex items-center gap-2 transition-all hover:-translate-y-1"><Icons.Refresh/> Reset All</button></div>
                     </div>
 
-                    {/* RIGHT SIDEBAR (Shop) */}
+                    {/* RIGHT SIDEBAR */}
                     <div className={`sidebar sidebar-right ${isMobile ? (showRight ? 'sidebar-right open' : 'sidebar-right') : (showRight ? 'w-72' : 'closed')}`}>
                         <div className="p-6 h-full flex flex-col">
                             <div className="flex justify-between items-center mb-4">
@@ -369,7 +384,7 @@
                                 </div>
                                 <button className="w-full bg-slate-800 text-white text-xs font-bold px-3 py-3 rounded-xl hover:bg-black transition-colors shadow-lg" onClick={addShop}>Add to Shop</button>
                             </div>
-                            <div className="flex-1 overflow-y-auto space-y-4">
+                            <div className="flex-1 overflow-y-auto space-y-4 scroll-area">
                                 {shop.map(box => (<div key={box.id} draggable onDragStart={e=>handleDragStart(e,'BOX_TEMPLATE',box)} className="drag-card group relative bg-white border-2 border-slate-100 p-5 rounded-3xl hover:border-sky-300 hover:shadow-lg transition-all cursor-grab active:cursor-grabbing"><div className="h-1.5 w-10 bg-sky-100 rounded-full mb-3 pointer-events-none"></div><h4 className="font-bold text-sm text-slate-700 pointer-events-none">{box.name}</h4><p className="text-[11px] font-bold text-slate-400 mt-1 pointer-events-none">{formatDims(box.dims)} cm</p><div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={()=>editShopItem(box.id)} className="pointer-events-auto text-slate-300 hover:text-indigo-500"><Icons.Edit/></button><button onClick={()=>delShop(box.id)} className="pointer-events-auto text-slate-300 hover:text-red-500"><Icons.Trash/></button></div></div>))}
                             </div>
                         </div>
